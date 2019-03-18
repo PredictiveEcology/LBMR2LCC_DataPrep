@@ -299,7 +299,7 @@ MapLBMR2LCC <- function(sim)
             sp2keep,
             function(sp, dt)
             {
-              rasterizeReduced(dt, sim$pixelGroupMap, sp, "pixelGroup" )
+              rasterizeReduced(dt, sim$pixelGroupMap, sp, "pixelGroup")
             }
           ),
           dt = dcast(
