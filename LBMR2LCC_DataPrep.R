@@ -188,8 +188,8 @@ Init <- function(sim) {
         sp2keep
       ),
       tibble(
-        age = sim[["kNN_AgeMap_BCR6_NWT"]][notNA],
         lcc = sim[["LCC05_BCR6_NWT"]][notNA],
+        age = sim[["kNN_AgeMap_BCR6_NWT"]][notNA],
         elev = sim[["DEM_BCR6_NWT"]][notNA],
         vrug = sim[["VRUG_BCR6_NWT"]][notNA]
       )
@@ -272,7 +272,7 @@ Init <- function(sim) {
 
 MapLBMR2LCC <- function(sim)
 {
-  px_id <- sim[["cohortData"]][["pixelGroup"]] # Coming from LandR_Biomass
+  notNA <- !is.na(sim[["BCR6_NWT_RT"]][])
   
   sp2keep <- c(
     "Abie_Bal", "Betu_Pap", "Lari_Lar",
@@ -284,27 +284,36 @@ MapLBMR2LCC <- function(sim)
     speciesCode = sp2keep
   )
 
-  age <- sim[["cohortData"]][, .(biomass = max(age)), by = "pixelGroup"][["speciesGroup"]]
+  age <- rasterizeReduced(sim$cohortData[, .(biomass = max(age)), by = "pixelGroup"], sim$pixelGroupMap, "age", "pixelGroup")
   
   newdata <- bind_cols(
     tibble(
-      elev = sim[["DEM_BCR6_NWT"]][px_id],
-      vrug = sim[["DEM_BCR6_NWT"]][px_id],
-      age = age
+      age = age[notNA],
+      elev = sim[["DEM_BCR6_NWT"]][notNA],
+      vrug = sim[["VRUG_BCR6_NWT"]][notNA]
     ),
-    as_tibble(
-      matrix(
-        setDT(
-          # Join                      # 0 g/m2 (absent)  # g/m2 to t/ha
-          sim[["cohortData"]][, c("speciesCode", "B")][spTable, on = "speciesCode"][is.na(B), B := 0][, B := B * 10]
-        ),
-        ncol = length(sp2keep),
-        dimnames = list(NULL, sp2keep)
-      )
+    setNames(
+      as_tibble(
+        stack(
+          lapply(
+            sp2keep,
+            function(sp, dt)
+            {
+              rasterizeReduced(dt, sim$pixelGroupMap, sp, "pixelGroup" )
+            }
+          ),
+          dt = dcast(
+                                 # Sum biomass by pixelGroup and species code          # Biomass data for all sp  # 0: sp is absent  # g/m2 to t/ha
+            sim[["cohortData"]][, .(B = sum(B)), by = c("pixelGroup", "speciesCode")][spTable, on = "speciesCode"][is.na(B), B := 0][, B := B * 10],
+            B ~ speciesCode
+          )
+        )[notNA]
+      ),
+      nm = sp2keep
     )
   )
     
-  LLC <- sim[["BCR6_NWT_RT"]]
+  LCC <- sim[["BCR6_NWT_RT"]]
   LCC[px_id][age < 15] <- 34
   
   pred <- predict(mod[["trainedClassifier"]], newdata = newdata)  
