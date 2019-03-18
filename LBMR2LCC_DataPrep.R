@@ -19,6 +19,12 @@ defineModule(sim, list(
     #defineParameter("paramName", "paramClass", value, min, max, "parameter description"),
     defineParameter(".plotInitialTime", "numeric", NA, NA, NA, "This describes the simulation time at which the first plot event should occur"),
     defineParameter(".plotInterval", "numeric", NA, NA, NA, "This describes the simulation time interval between plot events"),
+    defineParameter(name = ".runInitialTime", class = "numeric", default = start(sim),
+                    desc = "when to start this module? By default, the start
+                            time of the simulation."),
+    defineParameter(name = ".runInterval", class = "numeric", default = 1, 
+                    desc = "optional. Interval between two runs of this module,
+                            expressed in units of simulation time."),
     defineParameter(".saveInitialTime", "numeric", NA, NA, NA, "This describes the simulation time at which the first save event should occur"),
     defineParameter(".saveInterval", "numeric", NA, NA, NA, "This describes the simulation time interval between save events"),
     defineParameter(".useCache", "logical", FALSE, NA, NA, "Should this entire module be run with caching activated? This is generally intended for data-type modules, where stochasticity and time are not relevant")
@@ -168,91 +174,96 @@ doEvent.LBMR2LCC_DataPrep = function(sim, eventTime, eventType) {
 Init <- function(sim) {
   # ! ----- EDIT BELOW ----- ! #
   
-  notNA <- !is.na(sim[["BCR6_NWT_RT"]][])
-  
-  sp2keep <- c("Abie_Bal", "Betu_Pap", "Lari_Lar", "Pice_Gla", "Pice_Mar", "Pinu_Ban", "Pinu_Con", "Popu_Bal", "Popu_Tre")
-  
-  cart_data <- bind_cols(
-    setNames(
-      as_tibble(
-        sim[["kNN_SpeciesCoverPc_BCR6_NWT"]][notNA] / 100 * sim[["kNN_Biomass_BCR6_NWT"]][notNA]
+  train <- function()
+  {
+    notNA <- !is.na(sim[["BCR6_NWT_RT"]][])
+    
+    sp2keep <- c("Abie_Bal", "Betu_Pap", "Lari_Lar", "Pice_Gla", "Pice_Mar", "Pinu_Ban", "Pinu_Con", "Popu_Bal", "Popu_Tre")
+    
+    cart_data <- bind_cols(
+      setNames(
+        as_tibble(
+          sim[["kNN_SpeciesCoverPc_BCR6_NWT"]][notNA] / 100 * sim[["kNN_Biomass_BCR6_NWT"]][notNA]
+        ),
+        sp2keep
       ),
-      sp2keep
-    ),
-    tibble(
-      age = sim[["kNN_AgeMap_BCR6_NWT"]][notNA],
-      lcc = sim[["LCC05_BCR6_NWT"]][notNA],
-      elev = sim[["DEM_BCR6_NWT"]][notNA],
-      vrug = sim[["VRUG_BCR6_NWT"]][notNA]
-    )
-  ) %>%
-    # Remove pixels with NA
-    dplyr::filter_all(all_vars(!is.na(.))) %>%
-    
-    # Filter out pixels with classes that do not burn or disturbed recently
-    dplyr::filter(!lcc %in% c(33:39)) %>%
-    
-    # Reclassify LCC to our classes
-    mutate(
-      lcc = as.factor(
-        case_when(
-          lcc == 7 ~ 0, # conifer_medium_density
-          lcc %in% c(16:18, 21:32) ~ 1, # herbs_shurb
-          lcc == 13 ~ 2, # mixedwood_conifer_dom
-          lcc == 20 ~ 3, # open_conifer
-          lcc %in% c(1, 6, 8:10) ~ 4, # other_conifer
-          lcc %in% c(2:5, 11:12, 14:15) ~ 5, # other_treed
-          lcc == 19 ~ 6, # wetlands
+      tibble(
+        age = sim[["kNN_AgeMap_BCR6_NWT"]][notNA],
+        lcc = sim[["LCC05_BCR6_NWT"]][notNA],
+        elev = sim[["DEM_BCR6_NWT"]][notNA],
+        vrug = sim[["VRUG_BCR6_NWT"]][notNA]
+      )
+    ) %>%
+      # Remove pixels with NA
+      dplyr::filter_all(all_vars(!is.na(.))) %>%
+      
+      # Filter out pixels with classes that do not burn or disturbed recently
+      dplyr::filter(!lcc %in% c(33:39)) %>%
+      
+      # Reclassify LCC to our classes
+      mutate(
+        lcc = as.factor(
+          case_when(
+            lcc == 7 ~ 0, # conifer_medium_density
+            lcc %in% c(16:18, 21:32) ~ 1, # herbs_shurb
+            lcc == 13 ~ 2, # mixedwood_conifer_dom
+            lcc == 20 ~ 3, # open_conifer
+            lcc %in% c(1, 6, 8:10) ~ 4, # other_conifer
+            lcc %in% c(2:5, 11:12, 14:15) ~ 5, # other_treed
+            lcc == 19 ~ 6 # wetlands
+          )
         )
       )
-    )
-  
-  set.seed(1)
-  
-  sample_frac2 <- function(tbl, size = 1, max_size = 1e5, replace = FALSE, weight = NULL)
-  {
-    size <- enquo(size)
-    max_size <- enquo(max_size)
-    weight <- enquo(weight)
     
-    dplyr::slice(
-      tbl, 
-      sample.int(
-        n(), 
-        min(!!max_size, round(n() * dplyr:::check_frac(!!size, replace = replace))),
-        replace = replace, 
-        prob = !!weight
+    set.seed(1)
+    
+    sample_frac2 <- function(tbl, size = 1, max_size = 1e5, replace = FALSE, weight = NULL)
+    {
+      size <- enquo(size)
+      max_size <- enquo(max_size)
+      weight <- enquo(weight)
+      
+      dplyr::slice(
+        tbl, 
+        sample.int(
+          n(), 
+          min(!!max_size, round(n() * dplyr:::check_frac(!!size, replace = replace))),
+          replace = replace, 
+          prob = !!weight
+        )
       )
+    }
+    
+    train_set <- cart_data %>% group_by(lcc) %>% sample_frac2(.7) %>% ungroup
+    
+    rm(cart_data)
+    
+    dtrain <- xgb.DMatrix(as.matrix(dplyr::select(train_set, -lcc)), label = as.matrix(dplyr::select(train_set, lcc)))
+    
+    rm(train_set)
+    
+    param <- list(
+      colsample_bytree = 1,
+      eta = .1, 
+      eval_metric = "mlogloss",
+      gamma = 0, 
+      max_depth = 5,
+      min_child_weight = 1,
+      # nthread = 32, # Use all cores by default
+      num_class = nlevels(dplyr::select(train_set, lcc)[["lcc"]]),
+      objective = "multi:softmax",
+      silent = 1,
+      subsample = 0.7
     )
+    
+    xgb.train(
+      params = param, 
+      data = dtrain,
+      nrounds = 1000
+    )  
   }
   
-  train_set <- cart_data %>% group_by(lcc) %>% sample_frac2(.7) %>% ungroup
-  
-  rm(cart_data)
-  
-  dtrain <- xgb.DMatrix(as.matrix(dplyr::select(train_set, -lcc)), label = as.matrix(dplyr::select(train_set, lcc)))
-  
-  rm(train_set)
-  
-  param <- list(
-    colsample_bytree = 1,
-    eta = .1, 
-    eval_metric = "mlogloss",
-    gamma = 0, 
-    max_depth = 5,
-    min_child_weight = 1,
-    # nthread = 32, # Use all cores by default
-    num_class = nlevels(dplyr::select(train_set, lcc)[["lcc"]]),
-    objective = "multi:softmax",
-    silent = 1,
-    subsample = 0.7
-  )
- 
-  mod[["trainedClassifier"]] <- xgb.train(
-    params = param, 
-    data = dtrain,
-    nrounds = 1000
-  )
+  mod[["trainedClassifier"]] <- Cache(train)
 
   # ! ----- STOP EDITING ----- ! #
   
@@ -261,27 +272,47 @@ Init <- function(sim) {
 
 MapLBMR2LCC <- function(sim)
 {
-  notNA <- !is.na(sim[["BCR6_NWT_RT"]][])  
+  px_id <- sim[["cohortData"]][["pixelGroup"]] # Coming from LandR_Biomass
+  
+  sp2keep <- c(
+    "Abie_Bal", "Betu_Pap", "Lari_Lar",
+    "Pice_Gla", "Pice_Mar", "Pinu_Ban", 
+    "Pinu_Con", "Popu_Bal", "Popu_Tre"
+  )
+  
+  spTable <- data.table(
+    speciesCode = sp2keep
+  )
+
+  age <- sim[["cohortData"]][, .(biomass = max(age)), by = "pixelGroup"][["speciesGroup"]]
   
   newdata <- bind_cols(
-    elev <- sim[["DEM_BCR6_NWT"]][notNA],
-    vrug <- sim[["DEM_BCR6_NWT"]][notNA],
-    age = sim[["ageMap"]][notNA],
-    as_tibble(sim[["speciesBiomass"]][notNA])
-  ) %>%
-    # Remove pixels with NA
-    dplyr::filter_all(all_vars(!is.na(.)))
+    tibble(
+      elev = sim[["DEM_BCR6_NWT"]][px_id],
+      vrug = sim[["DEM_BCR6_NWT"]][px_id],
+      age = age
+    ),
+    as_tibble(
+      matrix(
+        setDT(
+          # Join                      # 0 g/m2 (absent)  # g/m2 to t/ha
+          sim[["cohortData"]][, c("speciesCode", "B")][spTable, on = "speciesCode"][is.na(B), B := 0][, B := B * 10]
+        ),
+        ncol = length(sp2keep),
+        dimnames = list(NULL, sp2keep)
+      )
+    )
+  )
     
   LLC <- sim[["BCR6_NWT_RT"]]
-  LCC[notNA] <- 0
-  LCC[sim[["ageMap"]] < 15] <- 34
+  LCC[px_id][age < 15] <- 34
   
   pred <- predict(mod[["trainedClassifier"]], newdata = newdata)  
   lccCode <- c(7, 16, 13, 20, 1, 2, 19)
   
   for (i in 0:6)
   {
-    LCC[notNA][pred == i] <- lccCode[i]
+    LCC[px_id][pred == i] <- lccCode[i]
   }
   
   sim[["LCC"]] <- setNames(
