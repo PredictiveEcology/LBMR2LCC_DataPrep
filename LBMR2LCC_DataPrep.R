@@ -106,7 +106,7 @@ doEvent.LBMR2LCC_DataPrep = function(sim, eventTime, eventType) {
     MapLBMR2LCC = {
       sim <- MapLBMR2LCC(sim)
       sim <- scheduleEvent(sim, time(sim) + 1, "LBMR2LCC_DataPrep", "MapLBMR2LCC")
-    }
+    },
     plot = {
       # ! ----- EDIT BELOW ----- ! #
       # do stuff for this event
