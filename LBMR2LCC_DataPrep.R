@@ -415,6 +415,7 @@ Event2 <- function(sim) {
       rasterToMatch = sim[["BCR6_NWT_RT"]],
       maskWithRTM = TRUE,
       filename2 = "kNN_Biomass_BCR6_NWT.tif",
+      overwrite = TRUE,
       destinationPath = tempdir()
     )
   }
