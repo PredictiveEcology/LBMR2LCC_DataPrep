@@ -32,46 +32,52 @@ defineModule(sim, list(
   inputObjects = bind_rows(
     #expectsInput("objectName", "objectClass", "input object description", sourceURL, ...),
     expectsInput(
-      objectName = "BCR6_NWT_RT", 
+      objectName = "DEM", 
       objectClass = "RasterLayer",
-      sourceURL = "https://drive.google.com/open?id=1NIjFbkckG3sewkTqPGaBGQDQLboPQ0wc",
-      desc = "Template raster of BCR6 as contained in the Northwest Territories."
+      sourceURL = "https://drive.google.com/open?id=1WHZnpWokgjraR7tGz0mIJEr9klLGUzB0",
+      desc = "Elevation data from AdaptWest."
     ),
     expectsInput(
-      objectName = "DEM_BCR6_NWT", 
+      objectName = "kNN_AgeMap", 
       objectClass = "RasterLayer",
-      sourceURL = "https://drive.google.com/file/d/1SKnXVqUD10_VdemQaPaz9MrWiNZzK7VY/view",
-      desc = "Elevation data from AdaptWest within BCR6 as contained in the Northwest Territories."
+      sourceURL = "http://tree.pfc.forestry.ca/kNN-StructureStandVolume.tar",
+      desc = "Stand age from the maps of Canada's forest attributes (2001)."
     ),
     expectsInput(
-      objectName = "kNN_AgeMap_BCR6_NWT", 
+      objectName = "kNN_Biomass", 
       objectClass = "RasterLayer",
-      sourceURL = NA,
-      desc = "Stand age from the maps of Canada's forest attributes (2001) within BCR6 as contained in the Northwest Territories."
+      sourceURL = "http://tree.pfc.forestry.ca/kNN-StructureBiomass.tar",
+      desc = "Biomass per species from the maps of Canada's forest attributes (2001)."
     ),
     expectsInput(
-      objectName = "kNN_Biomass_BCR6_NWT", 
-      objectClass = "RasterLayer",
-      sourceURL = NA,
-      desc = "Biomass per species from the maps of Canada's forest attributes (2001) within BCR6 as contained in the Northwest Territories."
-    ),
-    expectsInput(
-      objectName = "kNN_SpeciesCoverPc_BCR6_NWT", 
+      objectName = "kNN_SpeciesCoverPc", 
       objectClass = "RasterLayer",
       sourceURL = NA,
       desc = "Species cover from the maps of Canada's forest attributes (2001) within BCR6 as contained in the Northwest Territories."
     ),
     expectsInput(
-      objectName = "LCC05_BCR6_NWT", 
+      objectName = "vegMap",
       objectClass = "RasterLayer",
-      sourceURL = "https://drive.google.com/open?id=1WhL-DxrByCbzAj8A7eRx3Y1FVujtGmtN",
-      desc = "Land Cover Map of Canada 2005 (LCC05) within BCR6 as contained in the Northwest Territories."
+      sourceURL = "https://drive.google.com/open?id=1ziUPnFZMamA5Yi6Hhex9aZKerXLpVxvz",
+      desc = "Land Cover Map of Canada 2005 (LCC05)."
     ),
     expectsInput(
-      objectName = "VRUG_BCR6_NWT", 
+      objectName = "rasterToMatch", 
       objectClass = "RasterLayer",
-      sourceURL = NA,
-      desc = "Ruggedness within BCR6 as contained in the Northwest Territories."
+      sourceURL = "https://drive.google.com/open?id=1NIjFbkckG3sewkTqPGaBGQDQLboPQ0wc",
+      desc = "a template raster describing the studyArea"
+    ),
+    expectsInput(
+      objectName = "studyArea", 
+      objectClass = "SpatialPolygonsDataFrame",
+      sourceURL = "https://drive.google.com/open?id=1LUxoY2-pgkCmmNH5goagBp3IMpj6YrdU",
+      desc = "a template polygon describing the studyArea"
+    ),
+    expectsInput(
+      objectName = "VRUG", 
+      objectClass = "RasterLayer",
+      sourceURL = "https://drive.google.com/open?id=169gKoFkCzTxqqo9bl1I4D8ZgDKw02bQ7",
+      desc = "Ruggedness within BCR6."
     )
   ),
   outputObjects = bind_rows(
@@ -176,22 +182,22 @@ Init <- function(sim) {
   
   train <- function()
   {
-    notNA <- !is.na(sim[["BCR6_NWT_RT"]][])
+    notNA <- !is.na(sim[["rasterToMatch"]][])
     
     sp2keep <- c("Abie_Bal", "Betu_Pap", "Lari_Lar", "Pice_Gla", "Pice_Mar", "Pinu_Ban", "Pinu_Con", "Popu_Bal", "Popu_Tre")
     
     cart_data <- bind_cols(
       setNames(
         as_tibble(
-          sim[["kNN_SpeciesCoverPc_BCR6_NWT"]][notNA] / 100 * sim[["kNN_Biomass_BCR6_NWT"]][notNA]
+          sim[["kNN_SpeciesCoverPc"]][notNA] / 100 * sim[["kNN_Biomass"]][notNA]
         ),
         sp2keep
       ),
       tibble(
-        lcc = sim[["LCC05_BCR6_NWT"]][notNA],
-        age = sim[["kNN_AgeMap_BCR6_NWT"]][notNA],
-        elev = sim[["DEM_BCR6_NWT"]][notNA],
-        vrug = sim[["VRUG_BCR6_NWT"]][notNA]
+        lcc = sim[["vegMap"]][notNA],
+        age = sim[["kNN_AgeMap"]][notNA],
+        elev = sim[["DEM"]][notNA],
+        vrug = sim[["VRUG"]][notNA]
       )
     ) %>%
       # Remove pixels with NA
@@ -272,7 +278,7 @@ Init <- function(sim) {
 
 MapLBMR2LCC <- function(sim)
 {
-  notNA <- !is.na(sim[["BCR6_NWT_RT"]][])
+  notNA <- !is.na(sim[["rasterToMatch"]][])
   
   sp2keep <- c(
     "Abie_Bal", "Betu_Pap", "Lari_Lar",
@@ -289,8 +295,8 @@ MapLBMR2LCC <- function(sim)
   newdata <- bind_cols(
     tibble(
       age = age[notNA],
-      elev = sim[["DEM_BCR6_NWT"]][notNA],
-      vrug = sim[["VRUG_BCR6_NWT"]][notNA]
+      elev = sim[["DEM"]][notNA],
+      vrug = sim[["VRUG"]][notNA]
     ),
     setNames(
       as_tibble(
@@ -313,7 +319,7 @@ MapLBMR2LCC <- function(sim)
     )
   )
     
-  LCC <- sim[["BCR6_NWT_RT"]]
+  LCC <- sim[["rasterToMatch"]]
   LCC[px_id][age < 15] <- 34
   
   pred <- predict(mod[["trainedClassifier"]], newdata = newdata)  
@@ -396,98 +402,123 @@ Event2 <- function(sim) {
   #   sim$map <- Cache(prepInputs, extractURL('map')) # download, extract, load file from url in sourceURL
   # }
   
-  if (!suppliedElsewhere(object = "BCR6_NWT_RT", sim = sim))
+  if (!suppliedElsewhere(object = "rasterToMatch", sim = sim))
   {
-    sim[["BCR6_NWT_RT"]] <- Cache(
-      prepInputs,
+    sim[["rasterToMatch"]] <- Cache(
       targetFile = "BCR6_NWT-2.tif",
+      prepInputs, 
       url = "https://drive.google.com/open?id=1NIjFbkckG3sewkTqPGaBGQDQLboPQ0wc",
       destinationPath = tempdir()
     )
   }
   
-  if (!suppliedElsewhere(object = "kNN_Biomass_BCR6_NWT", sim = sim))
+  
+  if (!suppliedElsewhere(object = "studyArea", sim = sim))
   {
-    sim[["kNN_Biomass_BCR6_NWT"]] <- Cache(
+    sim[["studyArea"]] <- Cache(
+      prepInputs, 
+      url = "https://drive.google.com/open?id=1LUxoY2-pgkCmmNH5goagBp3IMpj6YrdU",
+      destinationPath = tempdir()
+    )
+  }
+  
+  if (!suppliedElsewhere(object = "DEM", sim = sim))
+  {
+    sim[["DEM"]] <- Cache(
+      prepInputs,
+      targetFile = "nadem100laz.tif",
+      url = "https://drive.google.com/open?id=1WHZnpWokgjraR7tGz0mIJEr9klLGUzB0",
+      destinationPath = tempdir(),
+      rasterToMatch = sim[["rasterToMatch"]],
+      maskWithRTM = TRUE,
+      studyArea = sim[["studyArea"]],
+      filename2 = NULL,
+      overwrite = TRUE
+    )
+  }
+  
+  if (!suppliedElsewhere(object = "kNN_Biomass", sim = sim))
+  {
+    sim[["kNN_Biomass"]] <- Cache(
       prepInputs,
       "http://tree.pfc.forestry.ca/kNN-StructureBiomass.tar",
       targetFile = "NFI_MODIS250m_kNN_Structure_Biomass_TotalLiveAboveGround_v0.tif",
-      rasterToMatch = sim[["BCR6_NWT_RT"]],
+      destinationPath = tempdir(),
+      rasterToMatch = sim[["rasterToMatch"]],
       maskWithRTM = TRUE,
-      filename2 = "kNN_Biomass_BCR6_NWT.tif",
-      overwrite = TRUE,
-      destinationPath = tempdir()
-    )
-  }
-
-  if (!suppliedElsewhere(object = "DEM_BCR6_NWT", sim = sim))
-  {
-    sim[["DEM_BCR6_NWT"]] <- Cache(
-      prepInputs,
-      targetFile = "nadem100laz_BCR6_NWT.tif",
-      url = "https://drive.google.com/file/d/1SKnXVqUD10_VdemQaPaz9MrWiNZzK7VY/view",
-      destinationPath = tempdir()
+      studyArea = sim[["studyArea"]],
+      filename2 = NULL,
+      overwrite = TRUE
     )
   }
   
-  if (!suppliedElsewhere(object = "kNN_AgeMap_BCR6_NWT", sim = sim))
+  if (!suppliedElsewhere(object = "kNN_AgeMap", sim = sim))
   {
-    sim[["kNN_AgeMap_BCR6_NWT"]] <- Cache(
+    sim[["kNN_AgeMap"]] <- Cache(
       prepInputs,
       "http://tree.pfc.forestry.ca/kNN-StructureStandVolume.tar",
       targetFile = "NFI_MODIS250m_kNN_Structure_Stand_Age_v0.tif",
-      rasterToMatch = sim[["BCR6_NWT_RT"]],
+      destinationPath = tempdir(),
+      rasterToMatch = sim[["rasterToMatch"]],
       maskWithRTM = TRUE,
-      filename2 = "kNN_AgeMap_BCR6_NWT.tif",
-      destinationPath = tempdir()
+      studyArea = sim[["studyArea"]],
+      filename2 = NULL,
+      overwrite = TRUE
     )
   }
   
-  if (!suppliedElsewhere(object = "kNN_SpeciesCoverPc_BCR6_NWT", sim = sim))
+  if (!suppliedElsewhere(object = "kNN_SpeciesCoverPc", sim = sim))
   {
     sp2keep <- c("Abie_Bal", "Betu_Pap", "Lari_Lar", "Pice_Gla", "Pice_Mar", "Pinu_Ban", "Pinu_Con", "Popu_Bal", "Popu_Tre")
     
-    sim[["kNN_SpeciesCoverPc_BCR6_NWT"]] <- Cache(
+    sim[["kNN_SpeciesCoverPc"]] <- Cache(
       postProcess,
       prepSpeciesLayers_KNN(
         destinationPath = inputPath(sim),
         outputPath = outputPath(sim),
         sppEquiv = LandR::sppEquivalencies_CA[KNN %in% sp2keep],
         sppEquivCol = "LandR",
-        rasterToMatch = sim[["BCR6_NWT_RT"]],
-        studyArea = NULL
+        rasterToMatch = sim[["rasterToMatch"]],
+        studyArea = sim[["studyArea"]]
       ),
-      rasterToMatch = sim[["BCR6_NWT_RT"]],
-      maskWithRTM = TRUE,
       method = "bilinear",
       datatype = "INT2U",
-      filename2 = "kNN_SpeciesCover.tif"
-    )
-  }
-  
-  if (!suppliedElsewhere(object = "LCC05_BCR6_NWT", sim = sim))
-  {
-    sim[["LCC05_BCR6_NWT"]] <- Cache(
-      prepInputs, 
-      targetFile = "LCC2005_V1_4a_BCR6_NWT.tif",
-      url = "https://drive.google.com/file/d/1WhL-DxrByCbzAj8A7eRx3Y1FVujtGmtN/view", 
-      destinationPath = tempdir()
-    )
-  }
-  
-  if (!suppliedElsewhere(object = "VRUG_BCR6_NWT", sim = sim))
-  {
-    sim[["VRUG_BCR6_NWT"]] <- Cache(
-      postProcess,
-      x = prepInputs(
-        targetFile = "vrug_bcr6.tif",
-        url = "https://drive.google.com/open?id=15Kcs83EyHnc-7vVbrg48srFrlD91WDtp", 
-        destinationPath = tempdir()
-      ),
-      rasterToMatch = sim[["BCR6_NWT_RT"]],
-      method = "bilinear",
+      destinationPath = tempdir(),
+      rasterToMatch = sim[["rasterToMatch"]],
       maskWithRTM = TRUE,
-      filename2 = file.path(tempdir(), "VRUG_BCR6_NWT.tif"),
+      studyArea = sim[["studyArea"]],
+      filename2 = NULL,
+      overwrite = TRUE
+    )
+  }
+  
+  if (!suppliedElsewhere(object = "vegMap", sim = sim))
+  {
+    sim[["vegMap"]] <- Cache(
+      prepInputs, 
+      targetFile = "LCC2005_V1_4a.tif",
+      url = "https://drive.google.com/open?id=1ziUPnFZMamA5Yi6Hhex9aZKerXLpVxvz", 
+      destinationPath = tempdir(),
+      rasterToMatch = sim[["rasterToMatch"]],
+      maskWithRTM = TRUE,
+      studyArea = sim[["studyArea"]],
+      filename2 = NULL,
+      overwrite = TRUE
+    )
+  }
+  
+  if (!suppliedElsewhere(object = "VRUG", sim = sim))
+  {
+    sim[["VRUG"]] <- Cache(
+      prepInputs,
+      targetFile = "vrug_bcr6.tif",
+      url = "https://drive.google.com/open?id=169gKoFkCzTxqqo9bl1I4D8ZgDKw02bQ7", 
+      destinationPath = tempdir(),
+      rasterToMatch = sim[["rasterToMatch"]],
+      maskWithRTM = TRUE,
+      studyArea = sim[["studyArea"]],
+      filename2 = NULL,
+      overwrite = TRUE,
       datatype = "FLT4S"
     )
   }
