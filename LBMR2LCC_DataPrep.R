@@ -76,7 +76,7 @@ defineModule(sim, list(
     expectsInput(
       objectName = "VRUG", 
       objectClass = "RasterLayer",
-      sourceURL = "https://drive.google.com/open?id=169gKoFkCzTxqqo9bl1I4D8ZgDKw02bQ7",
+      sourceURL = "https://drive.google.com/open?id=15Kcs83EyHnc-7vVbrg48srFrlD91WDtp",
       desc = "Ruggedness within BCR6."
     )
   ),
@@ -512,7 +512,7 @@ Event2 <- function(sim) {
     sim[["VRUG"]] <- Cache(
       prepInputs,
       targetFile = "vrug_bcr6.tif",
-      url = "https://drive.google.com/open?id=169gKoFkCzTxqqo9bl1I4D8ZgDKw02bQ7", 
+      url = "https://drive.google.com/open?id=15Kcs83EyHnc-7vVbrg48srFrlD91WDtp", 
       destinationPath = tempdir(),
       rasterToMatch = sim[["rasterToMatch"]],
       maskWithRTM = TRUE,
