@@ -102,12 +102,13 @@ doEvent.LBMR2LCC_DataPrep = function(sim, eventTime, eventType) {
 
       # do stuff for this event
       sim <- Init(sim)
-
+      sim <- MapLBMR2LCC(sim)
+      
       # schedule future event(s)
       sim <- scheduleEvent(sim, P(sim)$.plotInitialTime, "LBMR2LCC_DataPrep", "plot")
       sim <- scheduleEvent(sim, P(sim)$.saveInitialTime, "LBMR2LCC_DataPrep", "save")
       
-      sim <- scheduleEvent(sim, P(sim)$.plotInitialTime, "LBMR2LCC_DataPrep", "MapLBMR2LCC")
+      sim <- scheduleEvent(sim, P(sim)$.runInitialTime + 1, "LBMR2LCC_DataPrep", "MapLBMR2LCC")
     },
     MapLBMR2LCC = {
       sim <- MapLBMR2LCC(sim)
@@ -330,7 +331,8 @@ MapLBMR2LCC <- function(sim)
     LCC[px_id][pred == i] <- lccCode[i]
   }
   
-  sim[["LCC"]] <- setNames(
+  sim[["LCC"]] <- Cache(
+    setNames,
     raster::stack(
       lapply(
         c(1:32, 34:35),
@@ -433,7 +435,8 @@ Event2 <- function(sim) {
       maskWithRTM = TRUE,
       studyArea = sim[["studyArea"]],
       filename2 = NULL,
-      overwrite = TRUE
+      overwrite = TRUE,
+      method = "bilinear"
     )
   }
   
@@ -448,7 +451,8 @@ Event2 <- function(sim) {
       maskWithRTM = TRUE,
       studyArea = sim[["studyArea"]],
       filename2 = NULL,
-      overwrite = TRUE
+      overwrite = TRUE,
+      method = "bilinear"
     )
   }
   
@@ -463,7 +467,8 @@ Event2 <- function(sim) {
       maskWithRTM = TRUE,
       studyArea = sim[["studyArea"]],
       filename2 = NULL,
-      overwrite = TRUE
+      overwrite = TRUE,
+      method = "bilinear"
     )
   }
   
@@ -503,7 +508,8 @@ Event2 <- function(sim) {
       maskWithRTM = TRUE,
       studyArea = sim[["studyArea"]],
       filename2 = NULL,
-      overwrite = TRUE
+      overwrite = TRUE,
+      method = "ngb"
     )
   }
   
@@ -519,7 +525,8 @@ Event2 <- function(sim) {
       studyArea = sim[["studyArea"]],
       filename2 = NULL,
       overwrite = TRUE,
-      datatype = "FLT4S"
+      datatype = "FLT4S",
+      method = "bilinear"
     )
   }
   
