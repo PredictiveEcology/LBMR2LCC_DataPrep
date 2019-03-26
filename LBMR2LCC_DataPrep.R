@@ -14,7 +14,7 @@ defineModule(sim, list(
   timeunit = "year",
   citation = list("citation.bib"),
   documentation = list("README.txt", "LBMR2LCC_DataPrep.Rmd"),
-  reqdPkgs = list("caret", "dplyr", "LandR", "magrittr", "raster", "rlang", "tibble", "xgboost"),
+  reqdPkgs = list("caret", "data.table", "dplyr", "LandR", "magrittr", "raster", "rlang", "tibble", "xgboost"),
   parameters = rbind(
     #defineParameter("paramName", "paramClass", value, min, max, "parameter description"),
     defineParameter(".plotInitialTime", "numeric", NA, NA, NA, "This describes the simulation time at which the first plot event should occur"),
@@ -247,6 +247,8 @@ Init <- function(sim) {
     
     dtrain <- xgb.DMatrix(as.matrix(dplyr::select(train_set, -lcc)), label = as.matrix(dplyr::select(train_set, lcc)))
     
+    nlevels <- nlevels(dplyr::select(train_set, lcc)[["lcc"]])
+    
     rm(train_set)
     
     param <- list(
@@ -257,7 +259,7 @@ Init <- function(sim) {
       max_depth = 5,
       min_child_weight = 1,
       # nthread = 32, # Use all cores by default
-      num_class = nlevels(dplyr::select(train_set, lcc)[["lcc"]]),
+      num_class = nlevels,
       objective = "multi:softmax",
       silent = 1,
       subsample = 0.7
