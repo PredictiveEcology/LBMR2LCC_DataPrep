@@ -339,8 +339,8 @@ MapLBMR2LCC <- function(sim)
   }
   
   sim[["LCC"]] <- setNames(
-    Cache,
-    raster::stack(
+    Cache(
+      raster::stack,
       lapply(
         c(1:32, 34:35),
         function(x) LCC == x
