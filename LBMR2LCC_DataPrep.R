@@ -292,8 +292,13 @@ MapLBMR2LCC <- function(sim)
   spTable <- data.table(
     speciesCode = sp2keep
   )
-
-  age <- rasterizeReduced(sim$cohortData[, .(biomass = max(age)), by = "pixelGroup"], sim$pixelGroupMap, "age", "pixelGroup")
+  
+  age <- rasterizeReduced(
+    sim$cohortData[, .(biomass = max(age)), by = "pixelGroup"],
+    sim$pixelGroupMap,
+    "age",
+    "pixelGroup"
+  )
   
   newdata <- bind_cols(
     tibble(
@@ -323,7 +328,7 @@ MapLBMR2LCC <- function(sim)
   )
     
   LCC <- sim[["rasterToMatch"]]
-  LCC[px_id][age < 15] <- 34
+  LCC[px_id][age < 15] <- 34 # LCC's recently burned class => fireSense's disturbed class
   
   pred <- predict(mod[["trainedClassifier"]], newdata = newdata)  
   lccCode <- c(7, 16, 13, 20, 1, 2, 19)
@@ -333,8 +338,8 @@ MapLBMR2LCC <- function(sim)
     LCC[px_id][pred == i] <- lccCode[i]
   }
   
-  sim[["LCC"]] <- Cache(
-    setNames,
+  sim[["LCC"]] <- setNames(
+    Cache,
     raster::stack(
       lapply(
         c(1:32, 34:35),
