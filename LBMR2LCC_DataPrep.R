@@ -300,8 +300,6 @@ MapLBMR2LCC <- function(sim)
     "pixelGroup"
   )
   
-  browser()
-  
   dt <- dcast(
     # Sum biomass by pixelGroup and species code          # Biomass data for all sp  # 0: sp is absent  # g/m2 to t/ha
     sim[["cohortData"]][, .(B = sum(B)), by = c("pixelGroup", "speciesCode")][spTable, on = "speciesCode"][is.na(B), B := 0][, B := B * 10],
