@@ -294,10 +294,18 @@ MapLBMR2LCC <- function(sim)
   )
   
   age <- rasterizeReduced(
-    sim$cohortData[, .(biomass = max(age)), by = "pixelGroup"],
+    sim$cohortData[, .(age = max(age)), by = "pixelGroup"],
     sim$pixelGroupMap,
     "age",
     "pixelGroup"
+  )
+  
+  browser()
+  
+  dt <- dcast(
+    # Sum biomass by pixelGroup and species code          # Biomass data for all sp  # 0: sp is absent  # g/m2 to t/ha
+    sim[["cohortData"]][, .(B = sum(B)), by = c("pixelGroup", "speciesCode")][spTable, on = "speciesCode"][is.na(B), B := 0][, B := B * 10],
+    B + pixelGroup ~ speciesCode
   )
   
   newdata <- bind_cols(
@@ -316,11 +324,7 @@ MapLBMR2LCC <- function(sim)
               rasterizeReduced(dt, sim$pixelGroupMap, sp, "pixelGroup")
             }
           ),
-          dt = dcast(
-                                 # Sum biomass by pixelGroup and species code          # Biomass data for all sp  # 0: sp is absent  # g/m2 to t/ha
-            sim[["cohortData"]][, .(B = sum(B)), by = c("pixelGroup", "speciesCode")][spTable, on = "speciesCode"][is.na(B), B := 0][, B := B * 10],
-            B ~ speciesCode
-          )
+          dt = dt
         )[notNA]
       ),
       nm = sp2keep
@@ -328,14 +332,14 @@ MapLBMR2LCC <- function(sim)
   )
     
   LCC <- sim[["rasterToMatch"]]
-  LCC[px_id][age < 15] <- 34 # LCC's recently burned class => fireSense's disturbed class
+  LCC[notNA][age < 21] <- 34 # LCC's recently burned class => fireSense's disturbed class
   
-  pred <- predict(mod[["trainedClassifier"]], newdata = newdata)  
+  pred <- predict(mod[["trainedClassifier"]], newdata = as.matrix(newdata))
   lccCode <- c(7, 16, 13, 20, 1, 2, 19)
   
   for (i in 0:6)
   {
-    LCC[px_id][pred == i] <- lccCode[i]
+    LCC[notNA][pred == i] <- lccCode[i + 1]
   }
   
   sim[["LCC"]] <- setNames(
