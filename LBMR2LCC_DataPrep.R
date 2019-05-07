@@ -14,7 +14,7 @@ defineModule(sim, list(
   timeunit = "year",
   citation = list("citation.bib"),
   documentation = list("README.txt", "LBMR2LCC_DataPrep.Rmd"),
-  reqdPkgs = list("caret", "data.table", "dplyr", "LandR", "magrittr", "raster", "rlang", "tibble", "xgboost"),
+  reqdPkgs = list("caret", "data.table", "dplyr", "LandR", "magrittr", "raster", "rlang", "tibble", "xgboost", "parallel"),
   parameters = rbind(
     #defineParameter("paramName", "paramClass", value, min, max, "parameter description"),
     defineParameter(".plotInitialTime", "numeric", NA, NA, NA, "This describes the simulation time at which the first plot event should occur"),
@@ -180,13 +180,12 @@ doEvent.LBMR2LCC_DataPrep = function(sim, eventTime, eventType) {
 ### template initialization
 Init <- function(sim) {
   # ! ----- EDIT BELOW ----- ! #
-  
-  train <- function()
+  traini <- function()
   {
     notNA <- !is.na(sim[["rasterToMatch"]][])
     
-    sp2keep <- c("Abie_Bal", "Betu_Pap", "Lari_Lar", "Pice_Gla", "Pice_Mar", "Pinu_Ban", "Pinu_Con", "Popu_Bal", "Popu_Tre")
-    
+    # sp2keep <- c("Abie_Bal", "Betu_Pap", "Lari_Lar", "Pice_Gla", "Pice_Mar", "Pinu_Ban", "Pinu_Con", "Popu_Bal", "Popu_Tre")
+      sp2keep <- as.character(unique(sim$cohortData$speciesCode))
     cart_data <- bind_cols(
       setNames(
         as_tibble(
@@ -223,6 +222,7 @@ Init <- function(sim) {
       )
     
     set.seed(1)
+
     
     sample_frac2 <- function(tbl, size = 1, max_size = 1e5, replace = FALSE, weight = NULL)
     {
@@ -258,84 +258,146 @@ Init <- function(sim) {
       gamma = 0, 
       max_depth = 5,
       min_child_weight = 1,
-      # nthread = 32, # Use all cores by default
       num_class = nlevels,
       objective = "multi:softmax",
       silent = 1,
-      subsample = 0.7
+      subsample = 0.7,
+      nthread = parallel::detectCores()/2 # 
     )
     
-    xgb.train(
-      params = param, 
+    xgb.train(params = param, 
       data = dtrain,
       nrounds = 1000
     )  
   }
-  
-  mod[["trainedClassifier"]] <- Cache(train)
 
-  # ! ----- STOP EDITING ----- ! #
+  mod[["trainedClassifier"]] <- Cache(traini, userTags = c("function:train",
+                                                          "objectName:trainerClassifier"), cacheId = "afee1eb014fac309") # Work around to guarantee it will load correctly
+ 
+   # ----- STOP EDITING ----- ! #
   
   return(invisible(sim))
 }
 
 MapLBMR2LCC <- function(sim)
 {
+
   notNA <- !is.na(sim[["rasterToMatch"]][])
   
-  sp2keep <- c(
-    "Abie_Bal", "Betu_Pap", "Lari_Lar",
-    "Pice_Gla", "Pice_Mar", "Pinu_Ban", 
-    "Pinu_Con", "Popu_Bal", "Popu_Tre"
-  )
+  # sp2keep <- c(
+  #   "Abie_Bal", "Betu_Pap", "Lari_Lar",
+  #   "Pice_Gla", "Pice_Mar", "Pinu_Ban", 
+  #   "Pinu_Con", "Popu_Bal", "Popu_Tre"
+  # )
+  sp2keep <- as.character(unique(sim$cohortData$speciesCode))
   
   spTable <- data.table(
     speciesCode = sp2keep
   )
-  
   age <- rasterizeReduced(
-    sim$cohortData[, .(biomass = max(age)), by = "pixelGroup"],
+    # sim$cohortData[, .(biomass = max(age)), by = "pixelGroup"],
+      sim$cohortData[, .(age = max(age)), by = "pixelGroup"], # Tried to fix it... not sure it is correct ~TM
     sim$pixelGroupMap,
     "age",
     "pixelGroup"
   )
+
+  # dt <- dcast(
+  #   # Sum biomass by pixelGroup and species code          # Biomass data for all sp  # 0: sp is absent  # g/m2 to t/ha
+  #   sim[["cohortData"]][, .(B = sum(B)), by = c("pixelGroup", "speciesCode")][spTable, on = "speciesCode"][is.na(B), B := 0][, B := B * 10],
+  #   B + pixelGroup ~ speciesCode
+  # )
   
-  newdata <- bind_cols(
-    tibble(
+  dt <- dcast(
+    # Sum biomass by pixelGroup and species code          # Biomass data for all sp  # 0: sp is absent  # g/m2 to t/ha
+    sim[["cohortData"]][, .(B = sum(B)), by = c("pixelGroup", "speciesCode")][spTable, on = "speciesCode"][is.na(B), B := 0][, B := B * 10],
+    pixelGroup ~ speciesCode
+  )
+  
+    newdata <- bind_cols(tibble(
       age = age[notNA],
       elev = sim[["DEM"]][notNA],
       vrug = sim[["VRUG"]][notNA]
     ),
-    setNames(
-      as_tibble(
-        stack(
-          lapply(
-            sp2keep,
-            function(sp, dt)
-            {
-              rasterizeReduced(dt, sim$pixelGroupMap, sp, "pixelGroup")
-            }
-          ),
-          dt = dcast(
-                                 # Sum biomass by pixelGroup and species code          # Biomass data for all sp  # 0: sp is absent  # g/m2 to t/ha
-            sim[["cohortData"]][, .(B = sum(B)), by = c("pixelGroup", "speciesCode")][spTable, on = "speciesCode"][is.na(B), B := 0][, B := B * 10],
-            B ~ speciesCode
+    setNames(as_tibble(stack(
+      lapply(
+        X = sp2keep,
+        FUN = function(sp) {
+          rasterizeReduced(
+            reduced = dt,
+            fullRaster = sim$pixelGroupMap,
+            newRasterCols = sp,
+            mapcode = "pixelGroup"
           )
-        )[notNA]
-      ),
-      nm = sp2keep
-    )
-  )
+        }
+      )
+    )[notNA]), nm = sp2keep))
+
+ # newdata <- bind_cols(
+ #   tibble(
+ #     age = age[notNA],
+ #     elev = sim[["DEM"]][notNA],
+ #     vrug = sim[["VRUG"]][notNA]
+ #   ),
+ #   setNames(
+ #     as_tibble(
+ #       stack(
+ #         lapply(
+ #           sp2keep,
+ #           function(sp, dt)
+ #           {
+ #             rasterizeReduced(dt, sim$pixelGroupMap, sp, "pixelGroup")
+ #           }
+ #         ),
+ #         dt = dcast(
+ #           # Sum biomass by pixelGroup and species code          # Biomass data for all sp  # 0: sp is absent  # g/m2 to t/ha
+ #           sim[["cohortData"]][, .(B = sum(B)), by = c("pixelGroup", "speciesCode")][spTable, on = "speciesCode"][is.na(B), B := 0][, B := B * 10],
+ #           B ~ speciesCode
+ #         )
+ #       )[notNA]
+ #     ),
+ #     nm = sp2keep
+ #   )
+ # )
+
+  LCC <- sim[["LCC2005"]]
+  # LCC[px_id][age < 15] <- 34 # LCC's recently burned class => fireSense's disturbed class
+  LCC[notNA][age[notNA] < 21] <- 34 # There are no pixels with age < 20 in the age map
+  
+
+  # pred <- predict(mod[["trainedClassifier"]], newdata = newdata) # Doesn't work ~TM
+# Error in xgb.DMatrix(newdata, missing = missing) : 
+  # xgb.DMatrix does not support construction from list
+
+  # Workaround due to hardcoding species in a previous module...
+  newdataNames <- names(newdata)
+  modelNames <- mod[["trainedClassifier"]][["feature_names"]]
+  df <- setdiff(modelNames, newdataNames)
+  newdata[[df]] <- NA
+  toMatch <- match(mod[["trainedClassifier"]]$feature_names, names(newdata))
+  newdata <- as.matrix(newdata)
+  newdata <- newdata[, toMatch]
+
+  # OBS.: Reading from cacheId here doesn't work!!!
+  # pred <- Cache(predict, mod[["trainedClassifier"]], newdata = as.matrix(newdata), 
+  #               userTags = c("trial:Trial2", 
+  #                            "module:LBMR2LCC_DataPrep", 
+  #                            "function:predict"), cacheId = "e663a93b428e8fe1") # Remove cache id for future runs / other areas (here is just to speed up the process)
+  
+  pred <- Cache(mean, cacheId = "e663a93b428e8fe1")
+  
+  # pred <- Cache(predict, mod[["trainedClassifier"]], newdata = as.matrix(newdata),
+  #               userTags = c("objectName:trainedClassifier", 
+  #                            "module:LBMR2LCC_DataPrep", 
+  #                            "mainFun:prediction"), cacheId = "41b44e42338d53e0")
+  #                           
     
-  LCC <- sim[["rasterToMatch"]]
-  LCC[px_id][age < 15] <- 34 # LCC's recently burned class => fireSense's disturbed class
-  
-  pred <- predict(mod[["trainedClassifier"]], newdata = newdata)  
-  lccCode <- c(7, 16, 13, 20, 1, 2, 19)
-  
+  lccCode <- c(7, 16, 13, 20, 1, 2, 19) # ???? What is this and where does it come from?!
+
   for (i in 0:6)
   {
-    LCC[px_id][pred == i] <- lccCode[i]
+    # LCC[px_id][pred == i] <- lccCode[i]
+    LCC[notNA][pred == i] <- lccCode[i + 1] # lcccCode[i]
   }
   
   sim[["LCC"]] <- setNames(
@@ -435,15 +497,16 @@ Event2 <- function(sim) {
   {
     sim[["DEM"]] <- Cache(
       prepInputs,
-      targetFile = "nadem100laz.tif",
-      url = "https://drive.google.com/open?id=1WHZnpWokgjraR7tGz0mIJEr9klLGUzB0",
-      destinationPath = tempdir(),
+      targetFile = "nadem100laz_BCR6_NWT.tif",
+      url = "https://drive.google.com/open?id=1SKnXVqUD10_VdemQaPaz9MrWiNZzK7VY",
+      destinationPath = dataPath(sim),
       rasterToMatch = sim[["rasterToMatch"]],
       maskWithRTM = TRUE,
       studyArea = sim[["studyArea"]],
       filename2 = NULL,
       overwrite = TRUE,
-      method = "bilinear"
+      method = "bilinear",
+      omitArgs = c("destinationPath", "maskWithRTM")
     )
   }
   
@@ -453,13 +516,14 @@ Event2 <- function(sim) {
       prepInputs,
       "http://tree.pfc.forestry.ca/kNN-StructureBiomass.tar",
       targetFile = "NFI_MODIS250m_kNN_Structure_Biomass_TotalLiveAboveGround_v0.tif",
-      destinationPath = tempdir(),
+      destinationPath = dataPath(sim),
       rasterToMatch = sim[["rasterToMatch"]],
       maskWithRTM = TRUE,
       studyArea = sim[["studyArea"]],
       filename2 = NULL,
       overwrite = TRUE,
-      method = "bilinear"
+      method = "bilinear",
+      omitArgs = c("destinationPath", "maskWithRTM")
     )
   }
   
@@ -469,13 +533,14 @@ Event2 <- function(sim) {
       prepInputs,
       "http://tree.pfc.forestry.ca/kNN-StructureStandVolume.tar",
       targetFile = "NFI_MODIS250m_kNN_Structure_Stand_Age_v0.tif",
-      destinationPath = tempdir(),
+      destinationPath = dataPath(sim),
       rasterToMatch = sim[["rasterToMatch"]],
       maskWithRTM = TRUE,
       studyArea = sim[["studyArea"]],
       filename2 = NULL,
       overwrite = TRUE,
-      method = "bilinear"
+      method = "bilinear",
+      omitArgs = c("destinationPath", "maskWithRTM")
     )
   }
   
@@ -486,13 +551,12 @@ Event2 <- function(sim) {
     sim[["kNN_SpeciesCoverPc"]] <- Cache(
       postProcess,
       prepSpeciesLayers_KNN(
-        destinationPath = inputPath(sim),
+        destinationPath = dataPath(sim),
         outputPath = outputPath(sim),
         sppEquiv = LandR::sppEquivalencies_CA[KNN %in% sp2keep],
         sppEquivCol = "LandR",
         rasterToMatch = sim[["rasterToMatch"]],
-        studyArea = sim[["studyArea"]]
-      ),
+        studyArea = sim[["studyArea"]]),
       method = "bilinear",
       datatype = "INT2U",
       destinationPath = tempdir(),
@@ -510,13 +574,14 @@ Event2 <- function(sim) {
       prepInputs, 
       targetFile = "LCC2005_V1_4a.tif",
       url = "https://drive.google.com/open?id=1ziUPnFZMamA5Yi6Hhex9aZKerXLpVxvz", 
-      destinationPath = tempdir(),
+      destinationPath = dataPath(sim),
       rasterToMatch = sim[["rasterToMatch"]],
       maskWithRTM = TRUE,
       studyArea = sim[["studyArea"]],
       filename2 = NULL,
       overwrite = TRUE,
-      method = "ngb"
+      method = "ngb",
+      omitArgs = c("destinationPath", "maskWithRTM")
     )
   }
   
@@ -526,14 +591,15 @@ Event2 <- function(sim) {
       prepInputs,
       targetFile = "vrug_bcr6.tif",
       url = "https://drive.google.com/open?id=15Kcs83EyHnc-7vVbrg48srFrlD91WDtp", 
-      destinationPath = tempdir(),
+      destinationPath = dataPath(sim),
       rasterToMatch = sim[["rasterToMatch"]],
       maskWithRTM = TRUE,
       studyArea = sim[["studyArea"]],
       filename2 = NULL,
       overwrite = TRUE,
       datatype = "FLT4S",
-      method = "bilinear"
+      method = "bilinear",
+      omitArgs = c("destinationPath", "maskWithRTM")
     )
   }
   
