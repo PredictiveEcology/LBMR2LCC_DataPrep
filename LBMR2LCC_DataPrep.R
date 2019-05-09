@@ -272,7 +272,7 @@ Init <- function(sim) {
   }
 
   mod[["trainedClassifier"]] <- Cache(traini, userTags = c("function:train",
-                                                          "objectName:trainerClassifier"), cacheId = "afee1eb014fac309") # Work around to guarantee it will load correctly
+                                                          "objectName:trainerClassifier")) # Work around to guarantee it will load correctly was to add , cacheId = "afee1eb014fac309"
  
    # ----- STOP EDITING ----- ! #
   
@@ -379,12 +379,13 @@ MapLBMR2LCC <- function(sim)
   newdata <- newdata[, toMatch]
 
   # OBS.: Reading from cacheId here doesn't work!!!
-  # pred <- Cache(predict, mod[["trainedClassifier"]], newdata = as.matrix(newdata), 
-  #               userTags = c("trial:Trial2", 
-  #                            "module:LBMR2LCC_DataPrep", 
-  #                            "function:predict"), cacheId = "e663a93b428e8fe1") # Remove cache id for future runs / other areas (here is just to speed up the process)
+   pred <- predict(mod[["trainedClassifier"]], newdata = as.matrix(newdata), 
+                 userTags = c("trial:Trial2", 
+                              "module:LBMR2LCC_DataPrep", 
+                              "function:predict"))
   
-  pred <- Cache(mean, cacheId = "e663a93b428e8fe1")
+  # pred <- Cache(mean, cacheId = "e663a93b428e8fe1") # This is a workaround to get the correct cache, as the cache ID doesn't work in
+  # the case above
   
   # pred <- Cache(predict, mod[["trainedClassifier"]], newdata = as.matrix(newdata),
   #               userTags = c("objectName:trainedClassifier", 
