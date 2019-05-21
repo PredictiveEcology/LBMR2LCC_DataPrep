@@ -273,9 +273,8 @@ Init <- function(sim) {
   }
 
   mod[["trainedClassifier"]] <- Cache(traini, userTags = c("function:train",
-                                                          "objectName:trainerClassifier"), 
-                                      cacheId = "afee1eb014fac309") # Work around to guarantee it will load correctly
- 
+                                                          "objectName:trainerClassifier")) # Work around to guarantee it will load correctly was to add , cacheId = "afee1eb014fac309"
+
    # ----- STOP EDITING ----- ! #
   
   return(invisible(sim))
