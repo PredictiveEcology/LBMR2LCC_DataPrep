@@ -386,7 +386,10 @@ MapLBMR2LCC <- function(sim)
   newdataNames <- names(newdata)
   modelNames <- mod[["trainedClassifier"]][["feature_names"]]
   df <- setdiff(modelNames, newdataNames)
-  newdata[[df]] <- NA
+  # newdata[[df]] <- NA # This doesn't work! Maybe because I have 2 variables now? Fix in the next 3 lines ~TM 
+  newCols <- as.data.frame(matrix(NA, ncol = length(df), nrow = nrow(newdata)))
+  names(newCols) <- df
+  newdata <- bind_cols(newdata, as_tibble(newCols))
   toMatch <- match(mod[["trainedClassifier"]]$feature_names, names(newdata))
   newdata <- as.matrix(newdata)
   newdata <- newdata[, toMatch]
