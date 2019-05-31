@@ -263,7 +263,8 @@ Init <- function(sim) {
       objective = "multi:softmax",
       silent = 1,
       subsample = 0.7,
-      nthread = parallel::detectCores()/2 # 
+      nthread = parallel::detectCores()/2
+      # nthread = 2 # Trying to speed up, BUT it doesn't speed up! see comment below
     )
     
     xgb.train(params = param, 
@@ -271,9 +272,13 @@ Init <- function(sim) {
       nrounds = 1000
     )  
   }
-
+  # # Training takes less than 2.5hs using 2 threads but predictions take at least 12x more.
+  # mod[["trainedClassifier"]] <- Cache(traini, userTags = c("function:traini",
+  #                                                          "objectName:trainerClassifier_nthread2"))
+  
   mod[["trainedClassifier"]] <- Cache(traini, userTags = c("function:train",
-                                                          "objectName:trainerClassifier")) # Work around to guarantee it will load correctly was to add , cacheId = "afee1eb014fac309"
+                                                          "objectName:trainerClassifier")) # Work around to guarantee it will load correctly was to add ', cacheId = "afee1eb014fac309"' 
+  # But apparently is not necessary anymore.
 
    # ----- STOP EDITING ----- ! #
   
@@ -308,32 +313,33 @@ MapLBMR2LCC <- function(sim)
   #   sim[["cohortData"]][, .(B = sum(B)), by = c("pixelGroup", "speciesCode")][spTable, on = "speciesCode"][is.na(B), B := 0][, B := B * 10],
   #   B + pixelGroup ~ speciesCode
   # )
-  
+
+  oldDT <- setDTthreads(3)
+  on.exit(setDTthreads(oldDT))
+  t1 <- Sys.time()
   dt <- dcast(
     # Sum biomass by pixelGroup and species code          # Biomass data for all sp  # 0: sp is absent  # g/m2 to t/ha
     sim[["cohortData"]][, .(B = sum(B)), by = c("pixelGroup", "speciesCode")][spTable, on = "speciesCode"][is.na(B), B := 0][, B := B * 10],
     pixelGroup ~ speciesCode
   )
   
-    newdata <- bind_cols(tibble(
-      age = age[notNA],
-      elev = sim[["DEM"]][notNA],
-      vrug = sim[["VRUG"]][notNA]
-    ),
-    setNames(as_tibble(stack(
-      lapply(
-        X = sp2keep,
-        FUN = function(sp) {
-          rasterizeReduced(
-            reduced = dt,
-            fullRaster = sim$pixelGroupMap,
-            newRasterCols = sp,
-            mapcode = "pixelGroup"
-          )
-        }
-      )
-    )[notNA]), nm = sp2keep))
-
+  newdata <- bind_cols(tibble(age = age[notNA],
+                              elev = sim[["DEM"]][notNA],
+                              vrug = sim[["VRUG"]][notNA]),
+                       setNames(as_tibble(stack(
+                         lapply(
+                           X = sp2keep,
+                           FUN = function(sp) {
+                             rasterizeReduced(
+                               reduced = dt,
+                               fullRaster = sim$pixelGroupMap,
+                               newRasterCols = sp,
+                               mapcode = "pixelGroup"
+                             )
+                           }
+                         )
+                       )[notNA]), nm = sp2keep))
+  
  # newdata <- bind_cols(
  #   tibble(
  #     age = age[notNA],
@@ -396,8 +402,12 @@ MapLBMR2LCC <- function(sim)
 
   # OBS.: Reading from cacheId here doesn't work!!! And shouldn't br done anyway. This is redone every time step. 
   # Doesn't take more than 7min
+message("Starting prediction...")
+t1 <- Sys.time()
+# xgboost:::xgb.parameters(mod[["trainedClassifier"]]) <- list(nthread = 3)
   pred <- predict(mod[["trainedClassifier"]], newdata = as.matrix(newdata))
-
+t2 <- Sys.time()
+message("Prediction finished! ", print(t2 - t1))
   lccCode <- c(7, 16, 13, 20, 1, 2, 19) # the classifier predicts the classes used by fireSense, 
   # not the LCC classes per se. So this "lccCode" object is used later to map fireSense classes to LCC classes. 
   # Thus, the c(7, 16, 13...) are LCC codes.
@@ -410,13 +420,15 @@ MapLBMR2LCC <- function(sim)
   # Values would be either 0 or 1. The raster package is converting logical into integer 
   # automatically to the "==" test converts to 0 or 1. This value represents the proportion 
   # of the pixel covered by a specific LCC, so when LCC == x is FALSE it's 0 not NA.
-
+message("Reclassifying the rasters...")
+t1 <- Sys.time()
   sim[["LCC"]] <- setNames(raster::stack(lapply(X = c(1:32, 34:35), FUN = function(x){
     # Each layer has to have 1 for the correspondent LCC class in x and 0 for any others
           LCC == x}
       )),
     nm = paste0("cl", c(1:32, 34:35))
   )
+  message("Reclassification finished! ", print(Sys.time()-t1))
   
   invisible(sim)
 }
