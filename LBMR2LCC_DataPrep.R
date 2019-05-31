@@ -275,11 +275,14 @@ Init <- function(sim) {
   # # Training takes less than 2.5hs using 2 threads but predictions take at least 12x more.
   # mod[["trainedClassifier"]] <- Cache(traini, userTags = c("function:traini",
   #                                                          "objectName:trainerClassifier_nthread2"))
-  
+
+t1 <- Sys.time()
   mod[["trainedClassifier"]] <- Cache(traini, userTags = c("function:train",
                                                           "objectName:trainerClassifier")) # Work around to guarantee it will load correctly was to add ', cacheId = "afee1eb014fac309"' 
   # But apparently is not necessary anymore.
-
+message("Training finished. ")
+print(Sys.time()-t1)
+      
    # ----- STOP EDITING ----- ! #
   
   return(invisible(sim))
@@ -407,7 +410,9 @@ t1 <- Sys.time()
 # xgboost:::xgb.parameters(mod[["trainedClassifier"]]) <- list(nthread = 3)
   pred <- predict(mod[["trainedClassifier"]], newdata = as.matrix(newdata))
 t2 <- Sys.time()
-message("Prediction finished! ", print(t2 - t1))
+message("Prediction finished! ")
+print(t2 - t1)
+
   lccCode <- c(7, 16, 13, 20, 1, 2, 19) # the classifier predicts the classes used by fireSense, 
   # not the LCC classes per se. So this "lccCode" object is used later to map fireSense classes to LCC classes. 
   # Thus, the c(7, 16, 13...) are LCC codes.
@@ -420,15 +425,12 @@ message("Prediction finished! ", print(t2 - t1))
   # Values would be either 0 or 1. The raster package is converting logical into integer 
   # automatically to the "==" test converts to 0 or 1. This value represents the proportion 
   # of the pixel covered by a specific LCC, so when LCC == x is FALSE it's 0 not NA.
-message("Reclassifying the rasters...")
-t1 <- Sys.time()
   sim[["LCC"]] <- setNames(raster::stack(lapply(X = c(1:32, 34:35), FUN = function(x){
     # Each layer has to have 1 for the correspondent LCC class in x and 0 for any others
           LCC == x}
       )),
     nm = paste0("cl", c(1:32, 34:35))
   )
-  message("Reclassification finished! ", print(Sys.time()-t1))
   
   invisible(sim)
 }
