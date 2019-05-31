@@ -282,7 +282,7 @@ message(paste0("Starting BRT training. Using ", P(sim)$nThreadBRT,
                " threads from parameter P(sim)$nThreadBRT."))
 t1 <- Sys.time()
   mod[["trainedClassifier"]] <- Cache(traini, userTags = c("function:train",
-                                                          "objectName:trainerClassifier")) 
+                                                          "objectName:trainerClassifier"), cacheId = "afee1eb014fac309")
   # Work around to guarantee it will load correctly was to add ', cacheId = "afee1eb014fac309"' 
   # But apparently is not necessary anymore.
 
