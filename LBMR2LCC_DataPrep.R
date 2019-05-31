@@ -16,7 +16,10 @@ defineModule(sim, list(
   documentation = list("README.txt", "LBMR2LCC_DataPrep.Rmd"),
   reqdPkgs = list("caret", "data.table", "dplyr", "LandR", "magrittr", "raster", "rlang", "tibble", "xgboost", "parallel"),
   parameters = rbind(
-    #defineParameter("paramName", "paramClass", value, min, max, "parameter description"),
+    #defineParameter("paramName", "paramClass", value, min, max, "parameter description"), 
+    defineParameter("nThreadBRT", "numeric", parallel::detectCores(), NA, NA, paste0("Number of threads ro be used in the BRT of the classifier.",
+                                                                         " If parallelizing the run, set to the proportion of the available threads.", 
+                                                                         "Runs faster with all available threads")),
     defineParameter(".plotInitialTime", "numeric", NA, NA, NA, "This describes the simulation time at which the first plot event should occur"),
     defineParameter(".plotInterval", "numeric", NA, NA, NA, "This describes the simulation time interval between plot events"),
     defineParameter(name = ".runInitialTime", class = "numeric", default = start(sim),
@@ -263,7 +266,7 @@ Init <- function(sim) {
       objective = "multi:softmax",
       silent = 1,
       subsample = 0.7,
-      nthread = parallel::detectCores()/2
+      nthread = P(sim)$nThreadBRT
       # nthread = 2 # Trying to speed up, BUT it doesn't speed up! see comment below
     )
     
@@ -275,11 +278,14 @@ Init <- function(sim) {
   # # Training takes less than 2.5hs using 2 threads but predictions take at least 12x more.
   # mod[["trainedClassifier"]] <- Cache(traini, userTags = c("function:traini",
   #                                                          "objectName:trainerClassifier_nthread2"))
-
+message(paste0("Starting BRT training. Using ", P(sim)$nThreadBRT, 
+               " threads from parameter P(sim)$nThreadBRT."))
 t1 <- Sys.time()
   mod[["trainedClassifier"]] <- Cache(traini, userTags = c("function:train",
-                                                          "objectName:trainerClassifier")) # Work around to guarantee it will load correctly was to add ', cacheId = "afee1eb014fac309"' 
+                                                          "objectName:trainerClassifier")) 
+  # Work around to guarantee it will load correctly was to add ', cacheId = "afee1eb014fac309"' 
   # But apparently is not necessary anymore.
+
 message("Training finished. ")
 print(Sys.time()-t1)
       
