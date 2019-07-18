@@ -272,8 +272,8 @@ Init <- function(sim) {
     
     xgb.train(params = param, 
       data = dtrain,
-      nrounds = 1000
-    )  
+      nrounds = 5
+    )
   }
   # # Training takes less than 2.5hs using 2 threads but predictions take at least 12x more.
   # mod[["trainedClassifier"]] <- Cache(traini, userTags = c("function:traini",
@@ -282,7 +282,8 @@ message(paste0("Starting BRT training. Using ", P(sim)$nThreadBRT,
                " threads from parameter P(sim)$nThreadBRT."))
 t1 <- Sys.time()
   mod[["trainedClassifier"]] <- Cache(traini, userTags = c("function:train",
-                                                          "objectName:trainerClassifier"), cacheId = "afee1eb014fac309")
+                                                          "objectName:trainerClassifier",
+                                                          "reducedRounds"))
   # Work around to guarantee it will load correctly was to add ', cacheId = "afee1eb014fac309"' 
   # But apparently is not necessary anymore.
 
